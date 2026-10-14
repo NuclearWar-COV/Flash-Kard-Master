@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Flashcards</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2563eb">
+<link rel="icon" href="icon-192.png"><link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{--bg:#fafaf8;--cd:#fff;--fg:#1c1c1a;--mu:#6b6b66;--br:#d8d8d2;--ac:#2563eb;--on:#fff;--gd:#15803d;--bd:#b91c1c;color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#161615;--cd:#222221;--fg:#ececea;--mu:#9a9a94;--br:#3a3a37;--ac:#6d9bff;--on:#10151f;--gd:#4ade80;--bd:#f87171;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#161615;--cd:#222221;--fg:#ececea;--mu:#9a9a94;--br:#3a3a37;--ac:#6d9bff;--on:#10151f;--gd:#4ade80;--bd:#f87171;color-scheme:dark}
+*{box-sizing:border-box}[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:640px;margin:0 auto;padding:12px}
+h1{font-size:20px;margin:4px 0 10px}
+select,input,textarea,button{font:inherit;color:var(--fg);background:var(--cd);border:1px solid var(--br);border-radius:10px;padding:11px;width:100%}
+textarea{resize:vertical;min-height:70px}
+button{background:var(--ac);color:var(--on);border:0;font-weight:600;min-height:48px;cursor:pointer}
+button.ghost{background:var(--cd);color:var(--fg);border:1px solid var(--br)}
+button.bad{background:var(--bd);color:#fff}
+button:disabled{opacity:.55}
+nav{display:flex;gap:6px;margin:10px 0}nav button{background:var(--cd);color:var(--mu);border:1px solid var(--br)}nav button.on{background:var(--ac);color:var(--on)}
+label{display:block;font-size:14px;color:var(--mu);margin:8px 0}label select,label textarea{margin-top:4px;color:var(--fg)}
+label.chk{display:flex;gap:10px;align-items:center;color:var(--fg)}label.chk input{width:22px;height:22px}
+.row{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.row button{flex:1 1 auto;width:auto;padding:8px 12px}
+.col{display:flex;flex-direction:column;gap:8px}
+.mu,.muted{color:var(--mu);font-size:14px}
+.q{font-size:24px;font-weight:700;text-align:center;margin:26px 8px;overflow-wrap:anywhere}
+.bar{height:6px;background:var(--br);border-radius:3px;overflow:hidden;margin:6px 0}.bar i{display:block;height:100%;background:var(--ac)}
+.good{color:var(--gd)}.bad{color:var(--bd)}.info{color:var(--ac)}
+#fb{text-align:center;font-size:18px;margin:14px 0;min-height:26px}
+.item{background:var(--cd);border:1px solid var(--br);border-radius:10px;padding:10px 12px;margin:6px 0;display:flex;flex-direction:column;gap:2px;overflow-wrap:anywhere}
+.item span{color:var(--mu)}.item small{color:var(--mu);font-size:12px}
+dialog{width:min(92vw,520px);background:var(--bg);color:var(--fg);border:1px solid var(--br);border-radius:14px;padding:16px}
+dialog::backdrop{background:#0008}
+#toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--fg);color:var(--bg);padding:10px 16px;border-radius:20px;opacity:0;transition:opacity .2s;pointer-events:none}
+#toast.on{opacity:1}
+a{color:var(--ac)}
+</style></head><body><main>
+<h1>📇 Flashcards</h1>
+<label>Group <select id="deck"></select></label>
+<nav><button id="t0" class="on" data-a="tab0">Study</button><button id="t1" data-a="tab1">Edit cards &amp; groups</button></nav>
+
+<section id="study">
+ <div id="setup">
+  <label>Mode <select id="mode"><option value="type">Type answer<option value="mc">Multiple choice<option value="flip">Flip card</select></label>
+  <label>Direction <select id="dir"><option value="fwd">Question → Answer<option value="rev">Answer → Question</select></label>
+  <label>Cards per session <select id="lim"><option value="all">All<option>5<option>10<option>20<option>50</select></label>
+  <label class="chk"><input type="checkbox" id="smart" checked> Smart order (weak cards first)</label>
+  <button data-a="start" style="margin-top:10px">Start</button>
+ </div>
+ <div id="sess" hidden></div>
+</section>
+
+<section id="cards" hidden>
+ <div class="row"><button data-a="nd">New group</button><button data-a="rd" class="ghost">Rename</button><button data-a="dd" class="ghost">Duplicate</button><button data-a="xd" class="bad">Delete</button></div>
+ <input id="srch" placeholder="Search cards">
+ <div class="row"><button data-a="add">+ Add card</button><button data-a="imp">Import</button><button data-a="exp" class="ghost">Export</button><button data-a="rs" class="ghost">Reset stats</button></div>
+ <div id="cnt" class="muted"></div><div id="list"></div>
+</section>
+<dialog id="dlg"></dialog><div id="toast"></div>
+</main>
+<script>
+const $=s=>document.querySelector(s),v=id=>$('#'+id).value.trim(),cur=()=>$('#deck').value;
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const mk=(q,a)=>({q,a,box:1,r:0,w:0}),shuf=a=>{for(let i=a.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}return a};
+let D=null;try{D=JSON.parse(localStorage.getItem('fc2'))}catch(e){}
+if(!D||!D.decks)D={last:'',decks:{
+ 'Latin & Greek Roots':[['anthrop','man, human being'],['duc','lead, pull'],['erg/org/urg','work'],['log/leg','speak, write, study'],['phag','eat'],['pre-/pro-/prae-','before, forward, near on behalf of'],['re-/red-','again, back, down'],['se-','apart'],['tom/tm','cut'],['syn','together, with']].map(x=>mk(...x)),
+ 'Sample Deck':[['What is the capital of France?','Paris'],['What is the capital of Japan?','Tokyo'],['What is the capital of Italy?','Rome'],['What is the capital of Spain?','Madrid'],['What is 7 x 8?','56']].map(x=>mk(...x))}};
+const save=()=>{try{localStorage.setItem('fc2',JSON.stringify(D))}catch(e){}};
+let tt;const toast=m=>{const t=$('#toast');t.textContent=m;t.className='on';clearTimeout(tt);tt=setTimeout(()=>t.className='',2200)};
+
+/* question/answer splitter */
+const STRONG=['\t','::','|',' => ',' -> '],WEAK=[' - ',' – ',' — ',';'];
+function split(line){
+ line=line.replace(/^\s*\d+[.)]\s*/,'').trim();if(!line)return null;
+ let m=line.match(/^q(?:uestion)?\s*[:.)-]\s*(.+?)\s+a(?:nswer)?\s*[:.)-]\s*(.+)$/i);if(m)return[m[1].trim(),m[2].trim()];
+ const by=ds=>{for(const d of ds){const i=line.indexOf(d);if(i>0){const q=line.slice(0,i).trim(),a=line.slice(i+d.length).trim();if(q&&a)return[q,a]}}};
+ let r=by(STRONG);if(r)return r;
+ m=line.match(/^(.+?)\s+['"‘“](.+?)['"’”]?\s*$/);if(m)return[m[1].trim(),m[2].trim()];
+ if(r=by(WEAK))return r;if(r=by([':']))return r;
+ const i=line.indexOf('?');if(i>=0){const a=line.slice(i+1).trim();if(a)return[line.slice(0,i+1).trim(),a]}
+ return null}
+
+/* answer checking */
+const norm=s=>s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu,'').replace(/\s+/g,' ').trim();
+function lev(a,b){let p=[...Array(b.length+1).keys()];for(let i=1;i<=a.length;i++){const c=[i];for(let j=1;j<=b.length;j++)c[j]=Math.min(p[j]+1,c[j-1]+1,p[j-1]+(a[i-1]===b[j-1]?0:1));p=c}return p[b.length]}
+function grade(g){const a=norm(g),b=norm(S.back);if(!a)return[0,0];if(a===b)return[1,1];return[1-lev(a,b)/Math.max(a.length,b.length)>=.85?1:0,0]}
+
+/* decks & card list */
+function decks(sel){const n=Object.keys(D.decks).sort(),c=sel||cur()||D.last;$('#deck').innerHTML=n.map(x=>`<option ${x===c?'selected':''}>${esc(x)}</option>`).join('');list()}
+function list(){const cs=D.decks[cur()]||[],t=$('#srch').value.toLowerCase();$('#cnt').textContent=cs.length+' cards';
+ $('#list').innerHTML=cs.map((c,i)=>[c,i]).filter(([c])=>!t||(c.q+' '+c.a).toLowerCase().includes(t)).map(([c,i])=>`<div class="item" data-a="edit" data-i="${i}"><b>${esc(c.q)}</b><span>${esc(c.a)}</span><small>Box ${c.box} · ${c.r}✔ ${c.w}✘</small></div>`).join('')||'<p class="muted">No cards</p>'}
+function tab(n){$('#study').hidden=n!==0;$('#cards').hidden=n!==1;$('#t0').className=n?'':'on';$('#t1').className=n?'on':''}
+
+/* modal helper */
+function modal(title,body,ok,fn,extra){const d=$('#dlg');d.innerHTML=`<h3 style="margin-top:0">${title}</h3>${body}<div class="row">${extra||''}<button class="ghost" data-a="mx">${ok?'Cancel':'Close'}</button>${ok?`<button data-a="mok">${ok}</button>`:''}</div>`;d._fn=fn;if(!d.open)d.showModal()}
+
+/* study session */
+let S={};
+function begin(cards,cfg){const re=!!cards;cfg=cfg||{mode:$('#mode').value,rev:$('#dir').value==='rev',lim:$('#lim').value,smart:$('#smart').checked,dn:cur()};
+ cards=cards||[...(D.decks[cfg.dn]||[])];if(!cards.length)return toast('This group has no cards');
+ if(cfg.smart&&!re)cards=cards.map(c=>[c.box+Math.random()*1.5,c]).sort((a,b)=>a[0]-b[0]).map(x=>x[1]);else shuf(cards);
+ if(!re&&cfg.lim!=='all')cards=cards.slice(0,+cfg.lim);
+ S={mode:cfg.mode,rev:cfg.rev,lim:cfg.lim,smart:cfg.smart,dn:cfg.dn,cards,i:0,score:0,missed:[]};D.last=cfg.dn;save();
+ $('#setup').hidden=true;$('#sess').hidden=false;show1()}
+function end(){$('#setup').hidden=false;$('#sess').hidden=true;S.st=0}
+function choices(c){const k=S.rev?'q':'a',cor=c[k];let p=new Set();(D.decks[S.dn]||[]).forEach(x=>x[k]!==cor&&p.add(x[k]));
+ if(p.size<3)for(const d in D.decks)D.decks[d].forEach(x=>x[k]!==cor&&p.add(x[k]));
+ p=[...p];return p.length?shuf(shuf(p).slice(0,3).concat(cor)):null}
+function show1(){if(S.i>=S.cards.length)return done();
+ const c=S.cards[S.i];S.back=S.rev?c.q:c.a;S.st=1;let m=S.mode;S.opts=null;if(m==='mc'){S.opts=choices(c);if(!S.opts)m='type'}S.m=m;
+ const ans=m==='mc'?S.opts.map((o,i)=>`<button class="ghost" data-a="mc" data-i="${i}" style="margin:4px 0;text-align:left">${esc(o)}</button>`).join(''):
+  m==='type'?'<input id="inp" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Type your answer"><button data-a="sub" style="margin-top:8px">Submit</button>':
+  '<button data-a="show">Show answer</button>';
+ $('#sess').innerHTML=`<div class="bar"><i style="width:${S.i/S.cards.length*100}%"></i></div><div class="muted">Card ${S.i+1}/${S.cards.length} · Score ${S.score} · Box ${c.box}/5 · <a href="#" data-a="end">End</a></div><div class="q">${esc(S.rev?c.a:c.q)}</div><div id="ans">${ans}</div><div id="fb"></div><div id="act" class="row"></div>`;
+ const i=$('#inp');if(i)i.focus()}
+const fb=(t,k)=>$('#fb').innerHTML=`<div class="${k}">${esc(t)}</div>`,nxt=()=>$('#act').innerHTML='<button data-a="next">Next</button>';
+function rec(ok){const c=S.cards[S.i];if(ok){c.r++;c.box=Math.min(5,c.box+1);S.score++}else{c.w++;c.box=1;if(!S.missed.includes(c))S.missed.push(c)}save()}
+function answer(g){if(S.st!==1)return;S.st=2;const[ok,ex]=grade(g);$('#ans').querySelectorAll('button,input').forEach(x=>x.disabled=true);
+ if(ok){rec(1);fb(ex?'✔ Correct!':'✔ Close enough. Exact: '+S.back,'good');nxt()}
+ else{rec(0);fb('✘ Wrong. Answer: '+S.back,'bad');$('#act').innerHTML='<button class="ghost" data-a="over">I was right</button><button data-a="next">Next</button>'}}
+function over(){const c=S.cards[S.i];c.w--;S.missed=S.missed.filter(x=>x!==c);rec(1);fb('Marked as correct','good');nxt()}
+function fin(ok){rec(ok);S.i++;show1()}
+function done(){const n=S.cards.length;S.st=0;$('#sess').innerHTML=`<div class="q">Done!<br>${S.score} / ${n} (${Math.round(100*S.score/n)}%)</div><div class="col">${S.missed.length?`<button data-a="retry">Retry ${S.missed.length} missed</button>`:''}<button class="ghost" data-a="again">Restart group</button><button class="ghost" data-a="end">Back to setup</button></div>`}
+
+/* editing */
+function edit(i){const cs=D.decks[cur()];if(!cs)return;const c=i==null?{q:'',a:''}:cs[i];
+ modal(i==null?'Add card':'Edit card',`<label>Question<textarea id="m1">${esc(c.q)}</textarea></label><label>Answer<textarea id="m2">${esc(c.a)}</textarea></label>`,'Save',()=>{const q=v('m1'),a=v('m2');if(!q||!a)return false;if(i==null)cs.push(mk(q,a));else{c.q=q;c.a=a}save();list()},i==null?'':`<button class="bad" data-a="del" data-i="${i}">Delete</button>`)}
+function nameDlg(t,init,fn){modal(t,`<input id="m1" value="${esc(init)}" placeholder="Group name">`,'OK',()=>{const n=v('m1');if(!n||D.decks[n]){toast(n?'Name already used':'Enter a name');return false}fn(n);save();decks(n)})}
+const A={
+ start:()=>begin(),end,show:()=>{S.st=2;$('#ans').innerHTML='';fb(S.back,'info');$('#act').innerHTML='<button class="bad" data-a="fm">✘ Missed</button><button data-a="fk" style="background:var(--gd);color:#fff">✔ Knew it</button>'},
+ fk:()=>fin(1),fm:()=>fin(0),sub:()=>answer($('#inp').value),mc:i=>answer(S.opts[i]),over,next:()=>{S.i++;show1()},
+ retry:()=>begin(S.missed.slice(),S),again:()=>begin(null,S),tab0:()=>tab(0),tab1:()=>tab(1),
+ nd:()=>nameDlg('New group','',n=>D.decks[n]=[]),
+ rd:()=>{const o=cur();o&&nameDlg('Rename group',o,n=>{D.decks[n]=D.decks[o];delete D.decks[o]})},
+ dd:()=>{const o=cur();o&&nameDlg('Duplicate as',o+' (copy)',n=>D.decks[n]=D.decks[o].map(c=>mk(c.q,c.a)))},
+ xd:()=>{const o=cur();o&&modal('Delete group?',`<p>"${esc(o)}" and all its cards will be removed.</p>`,'Delete',()=>{delete D.decks[o];save();decks('')})},
+ add:()=>edit(),edit:i=>edit(i),
+ del:i=>{const cs=D.decks[cur()];modal('Delete card?',`<p>${esc(cs[i].q)}</p>`,'Delete',()=>{cs.splice(i,1);save();list()})},
+ imp:()=>{if(!cur())return toast('Create a group first');modal('Import cards',`<p class="muted">One per line: term 'meaning', Q | A, Q :: A, Q - A, Q => A, Q: A, tab, or Q? A</p><textarea id="m1" rows="9"></textarea>`,'Import',()=>{const cs=D.decks[cur()],seen=new Set(cs.map(c=>norm(c.q)));let n=0,s=0;
+  $('#m1').value.split(/\r?\n/).forEach(l=>{if(!l.trim())return;const p=split(l);if(p&&!seen.has(norm(p[0]))){cs.push(mk(...p));seen.add(norm(p[0]));n++}else s++});save();list();toast(`Added ${n}, skipped ${s}`)})},
+ exp:()=>{const cs=D.decks[cur()]||[];modal('Export (copy this text)',`<textarea id="m1" rows="9" readonly>${esc(cs.map(c=>c.q+' | '+c.a).join('\n'))}</textarea>`);$('#m1').select()},
+ rs:()=>modal('Reset stats?','<p>Reset progress for every card in this group.</p>','Reset',()=>{(D.decks[cur()]||[]).forEach(c=>Object.assign(c,{box:1,r:0,w:0}));save();list()}),
+ mx:()=>$('#dlg').close(),mok:()=>{const d=$('#dlg');if(!d._fn||d._fn()!==false)d.close()}};
+document.addEventListener('click',e=>{const b=e.target.closest('[data-a]');if(!b)return;const a=A[b.dataset.a];if(a){e.preventDefault();a(b.dataset.i===undefined?undefined:+b.dataset.i)}});
+document.addEventListener('keydown',e=>{if(e.key!=='Enter')return;const t=e.target;if(t.id==='inp'&&S.st===1)answer(t.value);else if(t===document.body&&S.st===2){const n=$('[data-a="next"]');n&&A.next()}});
+$('#deck').onchange=()=>{D.last=cur();save();list()};$('#srch').oninput=list;
+decks();
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+</script></body></html>
